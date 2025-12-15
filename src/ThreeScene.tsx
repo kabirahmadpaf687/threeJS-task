@@ -13,7 +13,7 @@ export default function ThreeScene() {
     const camera = new THREE.PerspectiveCamera(
       60,
       window.innerWidth / window.innerHeight,
-      1,
+      0.1,
       1000
     )
     camera.position.set(0, 1.5, 6)
@@ -36,55 +36,39 @@ export default function ThreeScene() {
     scene.add(dirLight)
 
     let robot: THREE.Object3D | null = null
-    let mixer: THREE.AnimationMixer | null = null
 
     const loader = new GLTFLoader()
-    loader.load('/robot.glb', (gltf: { scene: any; animations: string | any[] }) => {
-      robot = gltf.scene
-      if (!robot) return
-      robot.position.set(0, -1.2, 0)
-      robot.scale.setScalar(0.75)
-      robot.rotation.z = Math.PI-20 
+    loader.load('/robot.glb', (gltf) => {
+  robot = gltf.scene
+  robot.rotation.y = Math.SQRT2
+  if (!robot) return
 
-      scene.add(robot)
+  
+  const box = new THREE.Box3().setFromObject(robot)
+  const center = box.getCenter(new THREE.Vector3())
 
-      if (gltf.animations.length > 0) {
-        mixer = new THREE.AnimationMixer(robot)
-        const action = mixer.clipAction(gltf.animations[0])
-        action.play()
-      }
-    })
+  robot.position.sub(center) 
+  robot.position.y -= box.min.y
 
-    const target = new THREE.Vector3()
-    const clock = new THREE.Clock()
-    
-    const raycaster = new THREE.Raycaster()
-    const plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0)
+  robot.scale.setScalar(0.75)
 
-    let cursorX = 0 
+  scene.add(robot)
+})
+
+
+    let mouseX = 0
+    let mouseY = 0
 
     const onMouseMove = (e: MouseEvent) => {
-  cursorX = (e.clientX / window.innerWidth) * 2 - 1
+      mouseX = (e.clientX / window.innerWidth) * 2 - 1
+      mouseY = -(e.clientY / window.innerHeight) * 2 + 1
+    }
 
-  const ndc = new THREE.Vector2(
-    cursorX,
-    -(e.clientY / window.innerHeight) * 2 + 1
-  )
-
-  raycaster.setFromCamera(ndc, camera)
-  const intersect = new THREE.Vector3()
-  const hit = raycaster.ray.intersectPlane(plane, intersect)
-  if (hit) target.copy(intersect)
-}
-
-
-    
     let scale = 0.75
     const onWheel = (e: WheelEvent) => {
       if (!robot) return
-     
       scale += e.deltaY * -0.002
-      scale = THREE.MathUtils.clamp(scale, 0.1, 1.0)
+      scale = THREE.MathUtils.clamp(scale, 0.4, 1.2)
       robot.scale.setScalar(scale)
     }
 
@@ -98,35 +82,43 @@ export default function ThreeScene() {
     }
     window.addEventListener('resize', onResize)
 
+    const clock = new THREE.Clock()
+
     const animate = () => {
       requestAnimationFrame(animate)
-
       const delta = clock.getDelta()
 
       if (robot) {
-        robot.position.x = THREE.MathUtils.damp(
-          robot.position.x,
-          target.x,
+        const maxTilt = 0.85 
+
+        robot.rotation.y = THREE.MathUtils.damp(
+          robot.rotation.y,
+          mouseX * maxTilt,
           6,
           delta
         )
 
-        robot.position.y = THREE.MathUtils.damp(
-          robot.position.y,
-          target.y,
-          6,
-          delta
+        robot.rotation.x = THREE.MathUtils.damp(
+          robot.rotation.x,
+          mouseY * -maxTilt,
+          6, 
+          delta 
         )
-
+        // robot.rotation.z = THREE.MathUtils.damp(
+        //   robot.rotation.x,
+        //   mouseY * maxTilt,
+        //   6,
+        //   delta
+        // )
+         
       }
-
-      if (mixer) mixer.update(delta)
 
       renderer.render(scene, camera)
     }
 
     animate()
 
+    
     return () => {
       window.removeEventListener('mousemove', onMouseMove)
       window.removeEventListener('wheel', onWheel)
